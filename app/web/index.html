@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨库订单分析 · 下推 vs 整表对照</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>跨库订单分析</h1>
+    <p class="subtitle">两个独立本地数据库 · 筛选下推 + 分批键查询 · 整表读取对照 · 所有数字来自真实查询</p>
+  </div>
+  <div class="topbar-actions">
+    <span id="health" class="health-dot" title="服务状态">检测中</span>
+    <button id="theme-toggle" type="button" class="btn btn-ghost" aria-label="切换浅色/深色主题">🌓 主题</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ============ 配置面板 ============ -->
+  <section class="card config-card" aria-labelledby="cfg-title">
+    <h2 id="cfg-title">查询配置</h2>
+
+    <fieldset class="field">
+      <legend>执行方式</legend>
+      <div class="radio-row" role="radiogroup" aria-label="执行方式">
+        <label><input type="radio" name="mode" value="pushdown" checked> 键下推 + 分批</label>
+        <label><input type="radio" name="mode" value="full_scan"> 整表读取对照</label>
+        <label><input type="radio" name="mode" value="compare"> 两种方式对照</label>
+      </div>
+    </fieldset>
+
+    <div class="grid-2">
+      <label class="field">
+        <span>关联键（两表共同列）</span>
+        <select id="join-key"></select>
+      </label>
+      <label class="field">
+        <span>每批键数量（批次大小）</span>
+        <input id="batch-size" type="number" min="1" step="50" value="200">
+      </label>
+    </div>
+
+    <fieldset class="field">
+      <legend>选择字段</legend>
+      <div class="grid-2">
+        <div>
+          <h3 class="source-heading" data-source="customers">客户库字段</h3>
+          <div id="cols-customers" class="checkbox-grid"></div>
+        </div>
+        <div>
+          <h3 class="source-heading" data-source="orders">订单库字段</h3>
+          <div id="cols-orders" class="checkbox-grid"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>筛选条件（能下推的会下推到源端）</legend>
+      <div id="filters" class="filters-list"></div>
+      <button id="add-filter" type="button" class="btn btn-ghost btn-sm">＋ 添加筛选</button>
+    </fieldset>
+
+    <fieldset class="field fault-field">
+      <legend>故障注入（真实查询路径上的演示开关）</legend>
+      <div class="grid-2">
+        <label class="field compact">
+          <span>客户库注入延迟 (ms)</span>
+          <input id="delay-customers" type="number" min="0" step="100" value="0">
+        </label>
+        <label class="field compact">
+          <span>订单库注入延迟 (ms)</span>
+          <input id="delay-orders" type="number" min="0" step="100" value="0">
+        </label>
+        <label class="field compact">
+          <span>客户库语句超时 (ms)</span>
+          <input id="timeout-customers" type="number" min="10" step="100" value="5000">
+        </label>
+        <label class="field compact">
+          <span>订单库语句超时 (ms)</span>
+          <input id="timeout-orders" type="number" min="10" step="100" value="5000">
+        </label>
+        <label class="field compact">
+          <span>客户库第几批失败（留空不注入）</span>
+          <input id="fail-customers" type="number" min="1" step="1" placeholder="不注入">
+        </label>
+        <label class="field compact">
+          <span>订单库第几批失败（留空不注入）</span>
+          <input id="fail-orders" type="number" min="1" step="1" placeholder="不注入">
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="run-row">
+      <button id="run-btn" type="button" class="btn btn-primary">▶ 执行查询</button>
+      <button id="cancel-btn" type="button" class="btn btn-danger" disabled>■ 取消（停止剩余批次）</button>
+      <span id="run-status" class="run-status" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <!-- ============ 结果区 ============ -->
+  <section id="results" class="results" aria-live="polite">
+    <div id="empty-hint" class="card empty-hint">
+      <p>配置好字段与筛选后点击「执行查询」。结果将展示：</p>
+      <ul>
+        <li>执行计划（含源端真实 EXPLAIN QUERY PLAN）</li>
+        <li>每个源实际返回的行数与传回字节数</li>
+        <li>NULL 键 / 重复键 / 孤儿订单的明确语义统计</li>
+        <li>最终明细（仅整次完成时可下载 CSV）</li>
+      </ul>
+      <p class="note">说明：两个源各自独立快照、独立显示快照时间；系统不提供也不声称跨库全局事务。</p>
+    </div>
+  </section>
+</main>
+
+<template id="filter-template">
+  <div class="filter-row">
+    <select class="f-source" aria-label="筛选数据源"></select>
+    <select class="f-column" aria-label="筛选列"></select>
+    <select class="f-op" aria-label="操作符"></select>
+    <input class="f-value" type="text" aria-label="筛选值" placeholder="值；IN 用逗号分隔">
+    <button type="button" class="btn btn-ghost btn-sm f-remove" aria-label="删除该筛选">✕</button>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
